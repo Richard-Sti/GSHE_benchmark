@@ -1,15 +1,52 @@
-"""
-    gshe_odes!(
-        dx::Vector{<:Real},
-        x::Vector{<:Real},
-        geometry::Geometry,
-        ϵ::Real,
-        s::Integer
-    )
+@with_kw mutable struct SphericalCoords{T <: Real} <: Number
+    t::T = 0.0
+    r::T
+    θ::T
+    ϕ::T
+end
 
-Calculate the derivatives of ``x^μ`` and ``p_i`` with respect to the proper time, returned
-in this order. Expresssions are exported from Mathematica.
-"""
+@with_kw mutable struct Geometry{T <: Real}
+    dtype::DataType
+    source::SphericalCoords{T}
+    observer::SphericalCoords{T}
+    s::Integer = 2
+    a::T
+end
+
+
+function setup_geometry(
+    dtype::DataType=Float64;
+    rsource::Real,
+    θsource::Real,
+    ϕsource::Real,
+    robs::Real,
+    θobs::Real,
+    ϕobs::Real,
+    a::Real,
+    s::Integer=2,
+)
+    source = SphericalCoords{dtype}(r=rsource, θ=θsource, ϕ=ϕsource)
+    observer = SphericalCoords{dtype}(r=robs, θ=θobs, ϕ=ϕobs)
+    return Geometry{dtype}(dtype=dtype, source=source, observer=observer, s=s, a=a)
+end
+
+
+function tetrad_boosting(r::Real, geometry::Geometry)
+    Robs, θobs = geometry.observer.r, geometry.observer.θ
+    Rsrc, θsrc = geometry.source.r, geometry.source.θ
+    a = geometry.a
+    return -a*exp(-(-Rsrc + r)^2)*sin(θsrc)/sqrt(Rsrc^2 - 2*Rsrc + a^2) - a*exp(-(-Robs + r)^2)*sin(θobs)/sqrt(Robs^2 - 2*Robs + a^2)
+end
+
+
+function derivative_tetrad_boosting(r::Real, geometry::Geometry)
+    Robs, θobs = geometry.observer.r, geometry.observer.θ
+    Rsrc, θsrc = geometry.source.r, geometry.source.θ
+    a = geometry.a
+    return 2*a*((-Robs + r)*exp(-(-Robs + r)^2)*sin(θobs)/sqrt(Robs*(Robs - 2) + a^2) + (-Rsrc + r)*exp(-(-Rsrc + r)^2)*sin(θsrc)/sqrt(Rsrc*(Rsrc - 2) + a^2))
+end
+
+
 function gshe_odes!(
     dx::Vector{<:Real},
     x::Vector{<:Real},
@@ -18,7 +55,6 @@ function gshe_odes!(
     s::Integer
 )
     r, θ, ϕ, p_r, p_θ, p_ϕ = @view x[2:end]
-    # Unpack the struct
     @unpack a = geometry
 
     s_θ, c_θ = sin(θ), cos(θ)
